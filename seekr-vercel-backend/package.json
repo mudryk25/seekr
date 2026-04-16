@@ -1,0 +1,17 @@
+{
+  "name": "seekr-vercel-backend",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/multiparty": "^4.2.1"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.3.3",
+    "multiparty": "^4.2.3"
+  }
+}

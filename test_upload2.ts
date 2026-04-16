@@ -1,0 +1,1 @@
+import fetch from "node-fetch"; async function run(){ const res = await fetch("https://lens.google.com/uploadbyurl?url=https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png"); console.log(res.status); } run();

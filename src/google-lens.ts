@@ -1,58 +1,38 @@
 import { createReadStream } from "fs";
 import FormData from "form-data";
 import fetch from "node-fetch";
-import { basename } from "path";
-
-const API_BASE_URL = "https://google-lens.yencheng.dev";
-const UPLOAD_ENDPOINT = `${API_BASE_URL}/upload-image`;
-
-interface UploadResponse {
-  filename?: string;
-  message?: string;
-  error?: string;
-}
 
 /**
- * Uploads an image to a temporary hosting server and returns a Google Lens
- * search URL that can be opened in the browser.
- *
- * Flow:
- *   1. Upload image to intermediary server → get a public URL
- *   2. Construct lens.google.com/uploadbyurl?url={public_url}
- *
- * This approach is used because Google Lens's direct upload endpoint
- * has anti-bot protections. The uploadbyurl method lets Google fetch
- * the image itself from a public URL.
+ * Uploads an image explicitly via a secure, privacy-first temporary host (tmpfiles.org).
+ * We bypass the session-mismatch "Image not found" error by presenting Google Lens
+ * with a public URI that your own browser resolves using its native session cookies.
  *
  * @param imagePath - Absolute path to the image file to upload
- * @returns The Google Lens search URL to open in the browser
+ * @returns The final Google Lens search URL to be opened in the user browser
  */
 export async function uploadToGoogleLens(imagePath: string): Promise<string> {
-  const ext = imagePath.split(".").pop()?.toLowerCase() ?? "jpg";
-  const contentType = ext === "png" ? "image/png" : "image/jpeg";
-
   const form = new FormData();
-  form.append("image", createReadStream(imagePath), {
-    filename: basename(imagePath),
-    contentType,
-  });
+  form.append("file", createReadStream(imagePath));
 
-  const response = await fetch(UPLOAD_ENDPOINT, {
+  const response = await fetch("https://tmpfiles.org/api/v1/upload", {
     method: "POST",
     body: form,
-    headers: form.getHeaders(),
   });
 
   if (!response.ok) {
-    throw new Error(`Image upload failed with status ${response.status}: ${response.statusText}`);
+    throw new Error(`Temporary host rejected the upload. Status: ${response.status}`);
   }
 
-  const result = (await response.json()) as UploadResponse;
+  const data = (await response.json()) as { data?: { url?: string } };
 
-  if (!result.filename) {
-    throw new Error(result.error || "Upload succeeded but no filename was returned.");
+  if (!data?.data?.url) {
+    throw new Error(`Upload succeeded but the host failed to return a valid URL.`);
   }
 
-  const imageUrl = `${API_BASE_URL}/image/${result.filename}`;
-  return `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(imageUrl)}`;
+  // tmpfiles returns exactly: "http://tmpfiles.org/12345/snip.jpg"
+  // We need to inject "/dl/" into the path to trigger raw byte streaming for Google Lens
+  const rawFileUrl = data.data.url.replace("tmpfiles.org/", "tmpfiles.org/dl/");
+
+  // We wrap this inside the native Google Lens parameter
+  return `https://lens.google.com/upload?url=${encodeURIComponent(rawFileUrl)}`;
 }
